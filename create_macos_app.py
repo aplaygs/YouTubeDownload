@@ -231,20 +231,9 @@ def build_macos_app_bundle() -> Path:
 #include <unistd.h>
 
 int main(int argc, char *argv[]) {{
-    @autoreleasepool {{
-        [NSApplication sharedApplication];
-        [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
-        
-        NSBundle *bundle = [NSBundle mainBundle];
-        NSString *iconPath = [bundle pathForResource:@"AppIcon" ofType:@"icns"];
-        if (iconPath) {{
-            NSImage *iconImage = [[NSImage alloc] initWithContentsOfFile:iconPath];
-            if (iconImage) {{
-                [NSApp setApplicationIconImage:iconImage];
-            }}
-        }}
-    }}
-
+    // Не вызываем [NSApplication sharedApplication] здесь:
+    // Tkinter (libtk8.6) использует собственный подкласс TKApplication.
+    // Преждевременный вызов NSApplication ломает селектор macOSVersion в Tk.
     const char *project_dir = "{PROJECT_DIR}";
     char python_path[4096];
     snprintf(python_path, sizeof(python_path), "%s:%s/venv/lib/python3.12/site-packages", project_dir, project_dir);
