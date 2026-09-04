@@ -105,7 +105,7 @@ def build_macos_app_bundle() -> Path:
     icon_path = resources_dir / "AppIcon.icns"
     generate_app_icon(icon_path)
 
-    # 2. Создание Info.plist
+    # 2. Создание Info.plist с явным указанием архитектуры arm64 (без Rosetta 2)
     info_plist_content = """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -130,16 +130,23 @@ def build_macos_app_bundle() -> Path:
     <true/>
     <key>LSMinimumSystemVersion</key>
     <string>11.0</string>
+    <key>LSArchitecturePriority</key>
+    <array>
+        <string>arm64</string>
+    </array>
+    <key>LSRequiresNativeExecution</key>
+    <true/>
 </dict>
 </plist>
 """
     with open(contents_dir / "Info.plist", "w", encoding="utf-8") as f:
         f.write(info_plist_content)
 
-    # 3. Создание скрипта запуска в MacOS/YouTubeDownload
+    # 3. Создание скрипта запуска в MacOS/YouTubeDownload (строго native arm64)
     launcher_script = f"""#!/bin/bash
 DIR="{PROJECT_DIR}"
-exec "$DIR/venv/bin/python" "$DIR/main.py" --gui
+export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH"
+exec /usr/bin/arch -arm64 "$DIR/venv/bin/python" "$DIR/main.py" --gui
 """
     executable_path = macos_dir / "YouTubeDownload"
     with open(executable_path, "w", encoding="utf-8") as f:
