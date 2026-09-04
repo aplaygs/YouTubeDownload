@@ -3,11 +3,12 @@
 
 Отвечает за:
 1. Загрузку видео в выбранном разрешении (4K, 1080p, 720p и др.) со звуком.
-2. Извлечение и конвертацию аудио в MP3 (320 kbps) с сохранением обложки и тегов.
-3. Многопоточную загрузку фрагментов для максимальной скорости.
-4. Потокобезопасные коллбэки прогресса для CLI и GUI.
-5. Интеграцию с локальным FFmpeg без необходимости прав суперпользователя.
-6. Подключение JS-рантайма (Node.js/JSC) для обхода n-sig троттлинга.
+2. Автоматический подбор максимально совместимых с macOS кодеков (H.264/MP4 + AAC/M4A).
+3. Извлечение и конвертацию аудио в MP3 (320 kbps) с сохранением обложки и тегов.
+4. Многопоточную загрузку фрагментов для максимальной скорости.
+5. Потокобезопасные коллбэки прогресса для CLI и GUI.
+6. Интеграцию с локальным FFmpeg без необходимости прав суперпользователя.
+7. Подключение JS-рантайма (Node.js/JSC) для обхода n-sig троттлинга.
 """
 
 import os
@@ -180,21 +181,23 @@ class DownloadManager:
             if config.get("embed_metadata", True):
                 ydl_opts["postprocessors"].append({"key": "FFmpegMetadata"})
         else:
-            # Режим скачивания видео со звуком
+            # Режим скачивания видео со звуком:
+            # Отдаем приоритет MP4(H.264)+M4A(AAC) для мгновенной совместимости с QuickTime/macOS,
+            # с надежным fallback на любой лучший видео+аудио поток.
             if resolution in ("best", "4k", "2160p"):
-                fmt = "bestvideo+bestaudio/best"
+                fmt = "bestvideo[height<=2160][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=2160]+bestaudio/best"
             elif resolution in ("1440p", "2k"):
-                fmt = "bestvideo[height<=1440]+bestaudio/best[height<=1440]"
+                fmt = "bestvideo[height<=1440][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1440]+bestaudio/best"
             elif resolution == "1080p":
-                fmt = "bestvideo[height<=1080]+bestaudio/best[height<=1080]"
+                fmt = "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best"
             elif resolution == "720p":
-                fmt = "bestvideo[height<=720]+bestaudio/best[height<=720]"
+                fmt = "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best"
             elif resolution == "480p":
-                fmt = "bestvideo[height<=480]+bestaudio/best[height<=480]"
+                fmt = "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=480]+bestaudio/best"
             elif resolution == "360p":
-                fmt = "bestvideo[height<=360]+bestaudio/best[height<=360]"
+                fmt = "bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=360]+bestaudio/best"
             else:
-                fmt = f"bestvideo[height<={resolution}]+bestaudio/best[height<={resolution}]"
+                fmt = f"bestvideo[height<={resolution}]+bestaudio/best"
 
             ydl_opts["format"] = fmt
             ydl_opts["merge_output_format"] = "mp4"
