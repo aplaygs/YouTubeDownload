@@ -88,3 +88,31 @@ def sanitize_filename(name: str) -> str:
     if len(cleaned) > 200:
         cleaned = cleaned[:200].rstrip()
     return cleaned.strip()
+
+
+def move_to_trash(file_path: Union[str, Path]) -> bool:
+    """
+    Безопасно перемещает файл в системную корзину macOS (Trash),
+    не удаляя его безвозвратно.
+    """
+    path = Path(file_path).resolve()
+    if not path.exists():
+        return False
+    try:
+        cmd = f'tell application "Finder" to delete POSIX file "{path}"'
+        subprocess.run(["osascript", "-e", cmd], check=True, capture_output=True)
+        return True
+    except Exception:
+        # Резервный вариант: перемещение в ~/.Trash вручную
+        try:
+            trash_dir = Path.home() / ".Trash"
+            trash_dir.mkdir(parents=True, exist_ok=True)
+            target = trash_dir / path.name
+            if target.exists():
+                import time
+                target = trash_dir / f"{path.stem}_{int(time.time())}{path.suffix}"
+            path.rename(target)
+            return True
+        except Exception:
+            return False
+
