@@ -13,7 +13,7 @@ import io
 import os
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 from urllib.request import Request, urlopen
 
 import customtkinter as ctk
@@ -24,6 +24,7 @@ from core.downloader import DownloadManager
 from core.extractor import VideoInfo, extract_video_info
 from utils.clipboard import get_clipboard_text, is_youtube_url
 from utils.system import open_file, reveal_in_finder, send_macos_notification
+from utils.vpn import is_vpn_active
 
 # Настройка внешнего вида CustomTkinter
 ctk.set_appearance_mode("dark")
@@ -77,6 +78,16 @@ class YouTubeDownloadApp(ctk.CTk):
             text_color="gray"
         )
         subtitle_label.pack(side="left", padx=(10, 0), pady=(4, 0))
+
+        # Индикатор статуса VPN
+        self.vpn_badge = ctk.CTkLabel(
+            header_frame,
+            text="Проверка VPN...",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="gray"
+        )
+        self.vpn_badge.pack(side="right", padx=(0, 5))
+        self._update_vpn_badge()
 
         # 2. Секция ввода URL
         url_frame = ctk.CTkFrame(self)
@@ -338,8 +349,83 @@ class YouTubeDownloadApp(ctk.CTk):
         self.status_label.configure(text=f"Ошибка: {err_msg[:60]}...")
         self.video_title_label.configure(text="Не удалось получить информацию о видео.")
 
+    def _update_vpn_badge(self) -> None:
+        """Регулярно обновляет статус подключения VPN в шапке окна."""
+        vpn_active, vpn_name = is_vpn_active()
+        if vpn_active:
+            self.vpn_badge.configure(
+                text=f"⚠️ VPN включен ({vpn_name})",
+                text_color="#ff4757"
+            )
+        else:
+            self.vpn_badge.configure(
+                text="🟢 VPN отключен",
+                text_color="#2ed573"
+            )
+        # Повторяем проверку каждые 4 секунды
+        self.after(4000, self._update_vpn_badge)
+
+    def _show_vpn_warning_dialog(self, vpn_name: str, on_proceed: Callable[[], None]) -> None:
+        """Показывает предупреждающее модальное окно, если включен VPN."""
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Предупреждение: VPN активен")
+        dialog.geometry("450x240")
+        dialog.resizable(False, False)
+        dialog.grab_set()
+
+        msg = (
+            f"⚠️ Внимание! На вашем Mac включен VPN:\n"
+            f"«{vpn_name}»\n\n"
+            f"Вы указали, что не хотите скачивать через VPN.\n"
+            f"Пожалуйста, отключите VPN в строке меню macOS\n"
+            f"для максимальной скорости и экономии трафика."
+        )
+        label = ctk.CTkLabel(dialog, text=msg, font=ctk.CTkFont(size=13), justify="center")
+        label.pack(padx=20, pady=(25, 20))
+
+        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=20, pady=10)
+
+        def cancel():
+            dialog.destroy()
+
+        def proceed():
+            dialog.destroy()
+            on_proceed()
+
+        cancel_btn = ctk.CTkButton(
+            btn_frame,
+            text="Ок, я отключу VPN",
+            fg_color="#1f538d",
+            command=cancel
+        )
+        cancel_btn.pack(side="left", fill="x", expand=True, padx=(0, 10))
+
+        ignore_btn = ctk.CTkButton(
+            btn_frame,
+            text="Всё равно скачать",
+            fg_color="#444444",
+            hover_color="#555555",
+            command=proceed
+        )
+        ignore_btn.pack(side="right", fill="x", expand=True, padx=(10, 0))
+
     def _start_download(self) -> None:
-        """Запускает процесс скачивания в фоновом потоке."""
+        """Запускает процесс скачивания в фоновом потоке с проверкой VPN."""
+        url = self.url_entry.get().strip()
+        if not url:
+            return
+
+        vpn_active, vpn_name = is_vpn_active()
+        if vpn_active:
+            # Предупреждаем пользователя о VPN перед загрузкой
+            self._show_vpn_warning_dialog(vpn_name, self._execute_download_thread)
+            return
+
+        self._execute_download_thread()
+
+    def _execute_download_thread(self) -> None:
+        """Непосредственный запуск рабочего потока скачивания."""
         url = self.url_entry.get().strip()
         if not url:
             return
@@ -374,6 +460,7 @@ class YouTubeDownloadApp(ctk.CTk):
             args=(url, resolution, is_audio),
             daemon=True
         ).start()
+
 
     def _download_worker(self, url: str, resolution: str, is_audio: bool) -> None:
         """Рабочий поток скачивания."""

@@ -31,17 +31,26 @@ from core.downloader import DownloadManager
 from core.extractor import VideoInfo, extract_video_info
 from utils.clipboard import get_youtube_url_from_clipboard, is_youtube_url
 from utils.system import open_file, reveal_in_finder, send_macos_notification
+from utils.vpn import is_vpn_active
 
 console = Console()
 
 
 def print_banner() -> None:
-    """Выводит красивый приветственный баннер."""
+    """Выводит красивый приветственный баннер со статусом VPN."""
+    vpn_active, vpn_name = is_vpn_active()
+    if vpn_active:
+        vpn_status = f"[bold yellow]⚠️ Внимание: VPN активен ({vpn_name}). Рекомендуется отключить для скачивания без расхода трафика.[/bold yellow]"
+    else:
+        vpn_status = "[bold green]🟢 VPN отключен (прямое подключение)[/bold green]"
+
     banner_text = (
         "[bold cyan]▶ YouTubeDownload[/bold cyan] [dim]v1.0[/dim]\n"
-        "[white]Персональный загрузчик видео без рекламы, подписок и ограничений[/white]"
+        "[white]Персональный загрузчик видео без рекламы, подписок и ограничений[/white]\n\n"
+        f"{vpn_status}"
     )
     console.print(Panel(banner_text, border_style="cyan", expand=False))
+
 
 
 def display_video_card(info: VideoInfo) -> None:
@@ -160,13 +169,33 @@ def select_download_format(info: VideoInfo) -> Optional[dict]:
 def run_download_with_progress(url: str, format_choice: dict) -> Optional[str]:
     """
     Запускает скачивание с отображением анимированного прогресс-бара Rich.
+    Перед скачиванием проверяет активность VPN.
     """
+    # Проверка VPN
+    vpn_active, vpn_name = is_vpn_active()
+    if vpn_active:
+        console.print(Panel(
+            f"[bold yellow]⚠️ Внимание![/bold yellow] На вашем Mac включен VPN: [bold cyan]{vpn_name}[/bold cyan]\n"
+            f"[white]Вы указали, что не хотите скачивать через VPN (для максимальной скорости).\n"
+            f"Рекомендуется отключить VPN в строке меню macOS.[/white]",
+            border_style="yellow"
+        ))
+        proceed = questionary.confirm(
+            "Продолжить загрузку всё равно?",
+            default=False,
+            qmark="❓"
+        ).ask()
+        if not proceed:
+            console.print("[yellow]Загрузка приостановлена. Отключите VPN и попробуйте снова.[/yellow]")
+            return None
+
     is_audio = format_choice.get("type") == "audio"
     resolution = format_choice.get("resolution", "1080p")
 
     with Progress(
         SpinnerColumn(),
         TextColumn("[bold cyan]{task.description}[/bold cyan]"),
+
         BarColumn(bar_width=40, complete_style="green", finished_style="bold green"),
         TextColumn("[bold green]{task.percentage:>3.0f}%[/bold green]"),
         DownloadColumn(),
