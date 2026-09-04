@@ -1,0 +1,39 @@
+# Виртуальное окружение Python
+venv/
+env/
+.venv/
+
+# Кэши Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Временные файлы загрузки yt-dlp и медиа
+*.part
+*.ytdl
+*.temp
+downloads/
+*.mp4
+*.mkv
+*.webm
+*.mp3
+*.m4a
+
+# Локальные персональные настройки
+config.json
+
+# Системные файлы macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Настройки IDE
+.vscode/
+.idea/
+*.swp
+*.swo
