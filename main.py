@@ -50,7 +50,9 @@ def main() -> None:
         help="Пользовательская папка для сохранения"
     )
 
-    args = parser.parse_args()
+    # Фильтруем системные флаги macOS LaunchServices (например, -psn_0_xxxxx)
+    filtered_argv = [a for a in sys.argv[1:] if not a.startswith("-psn_")]
+    args, _ = parser.parse_known_args(filtered_argv)
 
     # 1. Если передана ссылка напрямую с флагами без интерактивности
     if args.url and not args.gui and not args.cli:

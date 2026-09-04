@@ -11,6 +11,7 @@
 import os
 import shutil
 import subprocess
+import sysconfig
 from pathlib import Path
 import math
 from PIL import Image, ImageDraw, ImageFilter
@@ -212,15 +213,100 @@ def build_macos_app_bundle() -> Path:
     with open(contents_dir / "Info.plist", "w", encoding="utf-8") as f:
         f.write(info_plist_content)
 
-    # 3. Создание скрипта запуска в MacOS/YouTubeDownload (строго native arm64)
-    launcher_script = f"""#!/bin/bash
+    # 3. Компиляция нативного Mach-O лаунчера (Cocoa + Python C API)
+    # Гарантирует правильную регистрацию бандла в macOS:
+    # Иконка AppIcon отображается в Dock, имя процесса и меню — YouTubeDownload (а не Python).
+    executable_path = macos_dir / "YouTubeDownload"
+
+    inc_dir = sysconfig.get_path("include")
+    lib_dir = sysconfig.get_config_var("LIBDIR")
+    py_ver = sysconfig.get_config_var("VERSION")
+
+    launcher_src = f"""#import <Cocoa/Cocoa.h>
+#define PY_SSIZE_T_CLEAN
+#include <Python.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+int main(int argc, char *argv[]) {{
+    @autoreleasepool {{
+        [NSApplication sharedApplication];
+        [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+        
+        NSBundle *bundle = [NSBundle mainBundle];
+        NSString *iconPath = [bundle pathForResource:@"AppIcon" ofType:@"icns"];
+        if (iconPath) {{
+            NSImage *iconImage = [[NSImage alloc] initWithContentsOfFile:iconPath];
+            if (iconImage) {{
+                [NSApp setApplicationIconImage:iconImage];
+            }}
+        }}
+    }}
+
+    const char *project_dir = "{PROJECT_DIR}";
+    char python_path[4096];
+    snprintf(python_path, sizeof(python_path), "%s:%s/venv/lib/python3.12/site-packages", project_dir, project_dir);
+    setenv("PYTHONPATH", python_path, 1);
+
+    const char *cur_path = getenv("PATH");
+    char new_path[4096];
+    snprintf(new_path, sizeof(new_path), "%s/venv/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:%s", project_dir, cur_path ? cur_path : "");
+    setenv("PATH", new_path, 1);
+
+    char script_path[4096];
+    snprintf(script_path, sizeof(script_path), "%s/main.py", project_dir);
+
+    int py_argc = 2;
+    char *py_argv[32];
+    py_argv[0] = argv[0];
+    py_argv[1] = script_path;
+
+    for (int i = 1; i < argc && py_argc < 30; i++) {{
+        if (strncmp(argv[i], "-psn_", 5) != 0) {{
+            py_argv[py_argc++] = argv[i];
+        }}
+    }}
+    py_argv[py_argc++] = "--gui";
+    py_argv[py_argc] = NULL;
+
+    return Py_BytesMain(py_argc, py_argv);
+}}
+"""
+    cache_dir = PROJECT_DIR / ".cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    launcher_m = cache_dir / "launcher.m"
+    with open(launcher_m, "w", encoding="utf-8") as f:
+        f.write(launcher_src)
+
+    compiled = False
+    try:
+        cmd = [
+            "clang", "-arch", "arm64", "-framework", "Cocoa",
+            f"-I{inc_dir}",
+            f"-L{lib_dir}", f"-lpython{py_ver}",
+            f"-Wl,-rpath,{lib_dir}",
+            "-o", str(executable_path),
+            str(launcher_m)
+        ]
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode == 0:
+            compiled = True
+        else:
+            print(f"[Предупреждение] Ошибка компиляции лаунчера: {res.stderr}")
+    except Exception as e:
+        print(f"[Предупреждение] Ошибка вызова clang: {e}")
+
+    if not compiled:
+        # Резервный bash-лаунчер
+        launcher_script = f"""#!/bin/bash
 DIR="{PROJECT_DIR}"
 export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH"
 exec /usr/bin/arch -arm64 "$DIR/venv/bin/python" "$DIR/main.py" --gui
 """
-    executable_path = macos_dir / "YouTubeDownload"
-    with open(executable_path, "w", encoding="utf-8") as f:
-        f.write(launcher_script)
+        with open(executable_path, "w", encoding="utf-8") as f:
+            f.write(launcher_script)
 
     executable_path.chmod(0o755)
 

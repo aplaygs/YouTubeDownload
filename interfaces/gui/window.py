@@ -93,6 +93,12 @@ class YouTubeDownloadApp(ctk.CTk):
 
         self._setup_ui()
 
+        # Вывод окна на передний план при открытии
+        self.lift()
+        self.attributes("-topmost", True)
+        self.after_idle(lambda: self.attributes("-topmost", False))
+        self.focus_force()
+
         # Если передана начальная ссылка, вставляем и сразу анализируем
         if initial_url:
             self.url_entry.insert(0, initial_url)
