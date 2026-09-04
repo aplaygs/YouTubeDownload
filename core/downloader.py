@@ -134,8 +134,8 @@ def ensure_quicktime_compatible(file_path: Path, progress_callback: Optional[Cal
 
     # Видеокодек
     if needs_video_transcode:
-        # Пробуем аппаратный h264_videotoolbox
-        cmd.extend(["-c:v", "h264_videotoolbox", "-b:v", "4500k"])
+        # Используем аппаратный VideoToolbox macOS (Apple Silicon M1/M2/M3/M4)
+        cmd.extend(["-c:v", "h264_videotoolbox", "-b:v", "8000k", "-maxrate", "12000k"])
     else:
         cmd.extend(["-c:v", "copy"])
 
@@ -234,6 +234,7 @@ class DownloadManager:
         self,
         url: str,
         resolution: str = "1080p",
+        target_height: Optional[int] = None,
         audio_only: bool = False,
         output_dir: Optional[Path] = None
     ) -> str:
@@ -290,44 +291,30 @@ class DownloadManager:
             # Режим скачивания видео со звуком:
             # СТРОГИЙ приоритет H.264 (avc1) + AAC (mp4a), чтобы QuickTime на macOS
             # открывал видео БЕЗ ошибок несовместимости!
-            if resolution in ("best", "4k", "2160p"):
+            parsed_height = target_height
+            if not parsed_height:
+                if any(k in resolution.lower() for k in ("best", "max", "лучш", "максим")):
+                    parsed_height = None
+                else:
+                    import re
+                    m = re.search(r"(\d{3,4})", resolution)
+                    if m:
+                        parsed_height = int(m.group(1))
+
+            if parsed_height:
                 fmt = (
-                    "bestvideo[height<=2160][vcodec^=avc1]+bestaudio[acodec^=mp4a]/"
-                    "bestvideo[height<=2160][vcodec^=avc]+bestaudio[acodec^=mp4a]/"
-                    "bestvideo[height<=2160]+bestaudio/best"
-                )
-            elif resolution in ("1440p", "2k"):
-                fmt = (
-                    "bestvideo[height<=1440][vcodec^=avc1]+bestaudio[acodec^=mp4a]/"
-                    "bestvideo[height<=1440][vcodec^=avc]+bestaudio[acodec^=mp4a]/"
-                    "bestvideo[height<=1440]+bestaudio/best"
-                )
-            elif resolution == "1080p":
-                fmt = (
-                    "bestvideo[height<=1080][vcodec^=avc1]+bestaudio[acodec^=mp4a]/"
-                    "bestvideo[height<=1080][vcodec^=avc]+bestaudio[acodec^=mp4a]/"
-                    "bestvideo[height<=1080]+bestaudio/best"
-                )
-            elif resolution == "720p":
-                fmt = (
-                    "bestvideo[height<=720][vcodec^=avc1]+bestaudio[acodec^=mp4a]/"
-                    "bestvideo[height<=720][vcodec^=avc]+bestaudio[acodec^=mp4a]/"
-                    "bestvideo[height<=720]+bestaudio/best"
-                )
-            elif resolution == "480p":
-                fmt = (
-                    "bestvideo[height<=480][vcodec^=avc1]+bestaudio[acodec^=mp4a]/"
-                    "bestvideo[height<=480][vcodec^=avc]+bestaudio[acodec^=mp4a]/"
-                    "bestvideo[height<=480]+bestaudio/best"
-                )
-            elif resolution == "360p":
-                fmt = (
-                    "bestvideo[height<=360][vcodec^=avc1]+bestaudio[acodec^=mp4a]/"
-                    "bestvideo[height<=360][vcodec^=avc]+bestaudio[acodec^=mp4a]/"
-                    "bestvideo[height<=360]+bestaudio/best"
+                    f"bestvideo[height<={parsed_height}][vcodec^=avc1]+bestaudio[acodec^=mp4a]/"
+                    f"bestvideo[height<={parsed_height}][vcodec^=avc]+bestaudio[acodec^=mp4a]/"
+                    f"bestvideo[height<={parsed_height}]+bestaudio[acodec^=mp4a]/"
+                    f"bestvideo[height<={parsed_height}]+bestaudio/best"
                 )
             else:
-                fmt = f"bestvideo[height<={resolution}][vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo[height<={resolution}]+bestaudio/best"
+                fmt = (
+                    "bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/"
+                    "bestvideo[vcodec^=avc]+bestaudio[acodec^=mp4a]/"
+                    "bestvideo+bestaudio[acodec^=mp4a]/"
+                    "bestvideo+bestaudio/best"
+                )
 
             ydl_opts["format"] = fmt
             ydl_opts["merge_output_format"] = "mp4"

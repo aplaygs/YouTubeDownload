@@ -14,9 +14,10 @@ import os
 import threading
 from pathlib import Path
 from typing import Callable, Optional
-from urllib.request import Request, urlopen
+import requests
 
 import customtkinter as ctk
+
 from PIL import Image
 
 from core.config import config
@@ -101,6 +102,7 @@ class YouTubeDownloadApp(ctk.CTk):
         )
         self.url_entry.pack(side="left", fill="x", expand=True, padx=(10, 8), pady=10)
         self.url_entry.bind("<Return>", lambda e: self._start_fetch_info())
+        self.url_entry.bind("<<Paste>>", lambda e: self.after(100, self._check_and_auto_fetch))
 
         paste_btn = ctk.CTkButton(
             url_frame,
@@ -188,10 +190,10 @@ class YouTubeDownloadApp(ctk.CTk):
 
         self.res_option_menu = ctk.CTkOptionMenu(
             options_frame,
-            values=["1080p Full HD", "720p HD", "480p", "360p", "🌟 Лучшее доступное"],
-            width=170
+            values=["Качество видео..."],
+            width=220
         )
-        self.res_option_menu.set("1080p Full HD")
+        self.res_option_menu.set("Качество видео...")
         self.res_option_menu.pack(side="left", padx=5)
 
         # 5. Папка сохранения
@@ -256,6 +258,12 @@ class YouTubeDownloadApp(ctk.CTk):
         )
         self.download_btn.pack(side="right", padx=(0, 10), pady=(0, 10))
 
+    def _check_and_auto_fetch(self) -> None:
+        """Автоматический запуск анализа ссылки при вставке из буфера."""
+        text = self.url_entry.get().strip()
+        if is_youtube_url(text):
+            self._start_fetch_info()
+
     def _on_paste_click(self) -> None:
         """Вставляет URL из буфера обмена."""
         text = get_clipboard_text()
@@ -276,8 +284,10 @@ class YouTubeDownloadApp(ctk.CTk):
         """Переключает видимость выбора разрешения при смене режима видео/аудио."""
         if "аудио" in value.lower() or "звук" in value.lower():
             self.res_option_menu.configure(state="disabled")
+            self.res_label.configure(text_color="gray")
         else:
             self.res_option_menu.configure(state="normal")
+            self.res_label.configure(text_color=["#000000", "#FFFFFF"])
 
     def _start_fetch_info(self) -> None:
         """Запускает получение метаданных в фоновом потоке."""
@@ -287,27 +297,53 @@ class YouTubeDownloadApp(ctk.CTk):
             return
 
         self.search_btn.configure(state="disabled")
-        self.status_label.configure(text="Получение информации о видео...")
+        self.download_btn.configure(state="disabled")
+        self.status_label.configure(text="Анализ видео и доступных качеств...")
+        self.thumb_label.configure(image=None, text="[ Загрузка превью... ]")
+        self.res_option_menu.configure(values=["Загрузка качеств..."])
+        self.res_option_menu.set("Загрузка качеств...")
 
         threading.Thread(target=self._fetch_info_worker, args=(url,), daemon=True).start()
 
     def _fetch_info_worker(self, url: str) -> None:
-        """Рабочий поток анализа ссылки."""
+        """Рабочий поток анализа ссылки и надежной загрузки обложки."""
         try:
             info = extract_video_info(url)
             self.current_video_info = info
 
-            # Загрузка обложки в память
-            thumbnail_image = None
+            # Список адресов превью для попытки загрузки (основная + резервные JPG/WebP)
+            candidate_thumbnails = []
             if info.thumbnail:
+                candidate_thumbnails.append(info.thumbnail)
+            if info.id:
+                candidate_thumbnails.append(f"https://i.ytimg.com/vi/{info.id}/maxresdefault.jpg")
+                candidate_thumbnails.append(f"https://i.ytimg.com/vi_webp/{info.id}/maxresdefault.webp")
+                candidate_thumbnails.append(f"https://i.ytimg.com/vi/{info.id}/hqdefault.jpg")
+                candidate_thumbnails.append(f"https://i.ytimg.com/vi/{info.id}/mqdefault.jpg")
+
+            thumbnail_image = None
+            headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
+            proxies = {"http": config.proxy_url, "https": config.proxy_url} if config.proxy_url else None
+
+            for thumb_url in candidate_thumbnails:
                 try:
-                    req = Request(info.thumbnail, headers={"User-Agent": "Mozilla/5.0"})
-                    with urlopen(req, timeout=5) as response:
-                        img_data = response.read()
-                        pil_img = Image.open(io.BytesIO(img_data))
-                        thumbnail_image = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(240, 135))
+                    try:
+                        resp = requests.get(thumb_url, headers=headers, proxies=proxies, timeout=7)
+                    except requests.exceptions.SSLError:
+                        resp = requests.get(thumb_url, headers=headers, proxies=proxies, timeout=7, verify=False)
+
+                    if resp.status_code == 200 and len(resp.content) > 500:
+                        pil_img = Image.open(io.BytesIO(resp.content)).convert("RGBA")
+                        # Масштабируем до 240x135 с сохранением четкости
+                        pil_img = pil_img.resize((240, 135), Image.Resampling.LANCZOS)
+                        thumbnail_image = ctk.CTkImage(
+                            light_image=pil_img,
+                            dark_image=pil_img,
+                            size=(240, 135)
+                        )
+                        break
                 except Exception:
-                    pass
+                    continue
 
             self.after(0, self._on_info_fetched_success, info, thumbnail_image)
         except Exception as e:
@@ -320,27 +356,34 @@ class YouTubeDownloadApp(ctk.CTk):
         self.video_channel_label.configure(text=f"Канал: {info.channel}")
         self.video_duration_label.configure(text=f"Длительность: {info.formatted_duration}")
 
+        # Сохраняем ссылку на объект изображения, чтобы сборщик мусора не удалил его
+        self._current_thumb_image = thumb_image
         if thumb_image:
             self.thumb_label.configure(image=thumb_image, text="")
+        else:
+            self.thumb_label.configure(image=None, text="[ Нет превью ]")
 
-        # Заполняем варианты доступных качеств
-        res_list = info.get_available_resolutions()
+        # Заполняем варианты качеств, в точности совпадающие с YouTube для данного ролика
+        quality_opts = info.get_quality_options()
         choices = []
-        if res_list:
-            for r in res_list:
-                label = f"{r}p"
-                if r == 1080:
-                    label += " (Full HD)"
-                elif r >= 2160:
-                    label += " (4K)"
-                choices.append(label)
-            choices.append("🌟 Лучшее доступное")
+        if quality_opts:
+            for opt in quality_opts:
+                choices.append(opt["label"])
+            choices.append("🌟 Максимальное качество")
             self.res_option_menu.configure(values=choices)
-            # Выбираем 1080p по умолчанию, если доступно
-            default_choice = "1080p (Full HD)" if 1080 in res_list else choices[0]
-            self.res_option_menu.set(default_choice)
 
-        self.status_label.configure(text="Информация получена. Нажмите «СКАЧАТЬ».")
+            # Выбираем по умолчанию 1080p, если есть, иначе лучшее доступное
+            default_choice = choices[0]
+            for c in choices:
+                if "1080p" in c:
+                    default_choice = c
+                    break
+            self.res_option_menu.set(default_choice)
+        else:
+            self.res_option_menu.configure(values=["🌟 Максимальное качество", "1080p Full HD", "720p HD"])
+            self.res_option_menu.set("🌟 Максимальное качество")
+
+        self.status_label.configure(text="Информация получена. Выберите качество и нажмите «СКАЧАТЬ».")
         self.download_btn.configure(state="normal")
 
     def _on_info_fetched_error(self, err_msg: str) -> None:
@@ -433,21 +476,20 @@ class YouTubeDownloadApp(ctk.CTk):
         is_audio = "звук" in self.mode_segmented.get().lower()
         selected_res_raw = self.res_option_menu.get()
 
-        # Разбор разрешения
-        if "лучшее" in selected_res_raw.lower():
-            resolution = "best"
-        elif "1080" in selected_res_raw:
-            resolution = "1080p"
-        elif "720" in selected_res_raw:
-            resolution = "720p"
-        elif "480" in selected_res_raw:
-            resolution = "480p"
-        elif "360" in selected_res_raw:
-            resolution = "360p"
-        elif "4k" in selected_res_raw.lower() or "2160" in selected_res_raw:
-            resolution = "4k"
+        # Разбор разрешения и точной высоты кадра
+        target_height = None
+        if any(k in selected_res_raw.lower() for k in ("максимальн", "лучш")):
+            resolution_str = "best"
+            target_height = None
         else:
-            resolution = "1080p"
+            import re
+            m = re.search(r"(\d{3,4})p?", selected_res_raw)
+            if m:
+                target_height = int(m.group(1))
+                resolution_str = f"{target_height}p"
+            else:
+                target_height = 1080
+                resolution_str = "1080p"
 
         self.download_btn.configure(state="disabled")
         self.search_btn.configure(state="disabled")
@@ -457,12 +499,11 @@ class YouTubeDownloadApp(ctk.CTk):
 
         threading.Thread(
             target=self._download_worker,
-            args=(url, resolution, is_audio),
+            args=(url, resolution_str, target_height, is_audio),
             daemon=True
         ).start()
 
-
-    def _download_worker(self, url: str, resolution: str, is_audio: bool) -> None:
+    def _download_worker(self, url: str, resolution: str, target_height: Optional[int], is_audio: bool) -> None:
         """Рабочий поток скачивания."""
         def on_progress(data: dict):
             status = data.get("status")
@@ -475,7 +516,8 @@ class YouTubeDownloadApp(ctk.CTk):
                 status_text = f"Загрузка: {percent:.1f}% ({downloaded}/{total}) • {speed} • ETA: {eta}"
                 self.after(0, self._update_progress, percent / 100.0, status_text)
             elif status == "processing":
-                self.after(0, self._update_progress, 1.0, "Объединение видео и аудио через FFmpeg...")
+                msg = data.get("message", "Обработка через FFmpeg...")
+                self.after(0, self._update_progress, 1.0, msg)
             elif status == "finished":
                 self.after(0, self._update_progress, 1.0, "Завершено!")
 
@@ -485,6 +527,7 @@ class YouTubeDownloadApp(ctk.CTk):
             result_path = self.download_manager.download(
                 url=url,
                 resolution=resolution,
+                target_height=target_height,
                 audio_only=is_audio,
                 output_dir=config.download_path
             )

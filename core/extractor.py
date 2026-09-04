@@ -59,23 +59,55 @@ class VideoInfo:
             return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
         return f"{minutes:02d}:{seconds:02d}"
 
-    def get_available_resolutions(self) -> List[int]:
+    def get_quality_options(self) -> List[Dict[str, Any]]:
         """
-        Возвращает отсортированный список стандартных доступных разрешений
-        (например: [2160, 1440, 1080, 720, 480, 360]).
+        Возвращает детальный список доступных качеств для конкретного видео,
+        с учетом реального разрешения и частоты кадров (FPS) с YouTube.
         """
         formats = self.raw.get("formats", [])
-        heights = set()
-        standard_thresholds = {2160, 1440, 1080, 720, 480, 360, 240, 144}
-
+        height_map: Dict[int, int] = {}
         for f in formats:
-            # Проверяем наличие видеокодека и высоты
-            if f.get("vcodec") != "none" and f.get("height"):
-                h = int(f["height"])
-                if h in standard_thresholds:
-                    heights.add(h)
+            h = f.get("height")
+            if f.get("vcodec") != "none" and h:
+                h = int(h)
+                fps = int(f.get("fps") or 0)
+                if h not in height_map or fps > height_map[h]:
+                    height_map[h] = fps
 
-        return sorted(list(heights), reverse=True)
+        options = []
+        for h in sorted(height_map.keys(), reverse=True):
+            if h < 240:
+                continue  # Пропускаем слишком низкое разрешение 144p
+            fps = height_map[h]
+            fps_tag = f"{fps}fps " if fps >= 50 else ""
+            if h >= 2160:
+                label = f"2160p {fps_tag}• 4K Ultra HD"
+            elif h >= 1440:
+                label = f"1440p {fps_tag}• 2K Quad HD"
+            elif h >= 1080:
+                label = f"1080p {fps_tag}• Full HD"
+            elif h >= 720:
+                label = f"720p {fps_tag}• HD"
+            elif h >= 480:
+                label = f"480p • SD"
+            else:
+                label = f"{h}p"
+
+            options.append({
+                "label": label.strip(),
+                "height": h,
+                "fps": fps
+            })
+
+        return options
+
+    def get_available_resolutions(self) -> List[int]:
+        """
+        Возвращает отсортированный список доступных разрешений
+        (например: [2160, 1440, 1080, 720, 480, 360]).
+        """
+        options = self.get_quality_options()
+        return [opt["height"] for opt in options]
 
 
 def build_ydl_extract_options(use_clients_override: bool = False) -> Dict[str, Any]:
