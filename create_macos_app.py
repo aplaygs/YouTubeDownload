@@ -23,12 +23,10 @@ APP_BUNDLE_PATH = APPLICATIONS_DIR / "YouTubeDownload.app"
 
 def generate_app_icon(output_icns: Path) -> bool:
     """
-    Генерирует стильную премиальную иконку macOS в формате .icns:
-    - Apple squircle с градиентом #FF2647 -> #940018
-    - Внутреннее радиальное свечение и верхний стеклянный блик (glass specular highlight)
-    - Тонкая металлическая кромка по контуру
-    - Мягкая нижняя тень для эффекта парения в Dock
-    - Центральный символ воспроизведения с закругленными углами и деликатной тенью
+    Генерирует премиальную иконку приложения в стиле Android 17 Material You Dark:
+    - Глубокий темный графитовый squircle (#121316 -> #202229) с мягкой внешней тенью и тонким кантом
+    - Парящий центральный дисплей YouTube в насыщенном градиенте (#FF304F -> #B80A22) со стеклянным бликом
+    - Центрированный белый символ воспроизведения со скругленными вершинами и деликатной тенью
     """
     temp_iconset_dir = PROJECT_DIR / "AppIcon.iconset"
     temp_iconset_dir.mkdir(parents=True, exist_ok=True)
@@ -41,89 +39,95 @@ def generate_app_icon(output_icns: Path) -> bool:
     # 1. Мягкая внешняя тень иконки
     shadow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     s_draw = ImageDraw.Draw(shadow)
-    s_draw.rounded_rectangle([margin, margin + 30, size - margin, size - margin + 30], radius=radius, fill=(0, 0, 0, 130))
+    s_draw.rounded_rectangle([margin, margin + 28, size - margin, size - margin + 28], radius=radius, fill=(0, 0, 0, 150))
     shadow = shadow.filter(ImageFilter.GaussianBlur(38))
 
-    # 2. Маска squircle
+    # 2. Темный корпус Squircle (#24262E -> #101115)
     mask = Image.new("L", (size, size), 0)
     m_draw = ImageDraw.Draw(mask)
     m_draw.rounded_rectangle(box, radius=radius, fill=255)
 
-    # 3. Насыщенный градиент с радиальной подсветкой сверху-по-центру
-    base_grad = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    bg_draw = ImageDraw.Draw(base_grad)
-
+    dark_grad = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    dg_draw = ImageDraw.Draw(dark_grad)
     for y in range(margin, size - margin):
-        for x in range(margin, size - margin):
-            dx = (x - 512) / 450.0
-            dy = (y - 340) / 450.0
-            dist = min(1.0, math.sqrt(dx * dx + dy * dy))
-            vy = (y - margin) / (size - 2 * margin)
-            t = vy * 0.62 + dist * 0.38
-            t = t * t * (3 - 2 * t)
-            r = int(255 * (1 - t) + 148 * t)
-            g = int(48 * (1 - t) + 4 * t)
-            b = int(72 * (1 - t) + 18 * t)
-            bg_draw.point((x, y), fill=(r, g, b, 255))
+        t = (y - margin) / (size - 2 * margin)
+        val = int(36 * (1 - t) + 16 * t)
+        dg_draw.line([(margin, y), (size - margin, y)], fill=(val, val + 2, val + 5, 255))
 
     body = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    body.paste(base_grad, (0, 0), mask)
+    body.paste(dark_grad, (0, 0), mask)
 
-    # 4. Верхний стеклянный блик
-    glass = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    g_draw = ImageDraw.Draw(glass)
-    for y in range(margin, margin + 260):
-        alpha = int(45 * (1 - (y - margin) / 260))
-        g_draw.line([(margin, y), (size - margin, y)], fill=(255, 255, 255, alpha))
-    body = Image.alpha_composite(body, Image.composite(glass, Image.new("RGBA", (size, size), (0, 0, 0, 0)), mask))
-
-    # 5. Тонкая кромка по краю
+    # Металлическая кромка по контуру
     rim = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     r_draw = ImageDraw.Draw(rim)
-    r_draw.rounded_rectangle([margin + 1, margin + 1, size - margin - 1, size - margin - 1], radius=radius - 1, outline=(255, 255, 255, 115), width=3)
-    r_draw.rounded_rectangle([margin + 2, margin + 4, size - margin - 2, size - margin], radius=radius - 2, outline=(0, 0, 0, 80), width=2)
+    r_draw.rounded_rectangle([margin + 1, margin + 1, size - margin - 1, size - margin - 1], radius=radius - 1, outline=(255, 255, 255, 55), width=2)
+    r_draw.rounded_rectangle([margin + 2, margin + 3, size - margin - 2, size - margin], radius=radius - 2, outline=(0, 0, 0, 95), width=3)
     body = Image.alpha_composite(body, Image.composite(rim, Image.new("RGBA", (size, size), (0, 0, 0, 0)), mask))
 
-    # 6. Символ Play с мягким скруглением углов (4x суперсемплинг)
+    # 3. Центральный дисплей YouTube Screen (4x суперсемплинг)
     scale = 4
-    hi_size = size * scale
-    sym_mask = Image.new("L", (hi_size, hi_size), 0)
+    hi_sz = size * scale
+    p_w, p_h = 2460, 1720
+    p_cx, p_cy = 2048, 2048
+
+    plate_mask = Image.new("L", (hi_sz, hi_sz), 0)
+    pm_draw = ImageDraw.Draw(plate_mask)
+    pm_draw.rounded_rectangle([p_cx - p_w // 2, p_cy - p_h // 2, p_cx + p_w // 2, p_cy + p_h // 2], radius=520, fill=255)
+
+    hi_plate = Image.new("RGBA", (hi_sz, hi_sz), (0, 0, 0, 0))
+    hp_draw = ImageDraw.Draw(hi_plate)
+    for y in range(p_cy - p_h // 2, p_cy + p_h // 2):
+        t = (y - (p_cy - p_h // 2)) / p_h
+        t = t * t * (3 - 2 * t)
+        r = int(255 * (1 - t) + 170 * t)
+        g = int(48 * (1 - t) + 10 * t)
+        b = int(72 * (1 - t) + 24 * t)
+        hp_draw.line([(0, y), (hi_sz, y)], fill=(r, g, b, 255))
+
+    # Стеклянный градиентный блик сверху
+    glass_layer = Image.new("RGBA", (hi_sz, hi_sz), (0, 0, 0, 0))
+    gl_draw = ImageDraw.Draw(glass_layer)
+    for y in range(p_cy - p_h // 2, p_cy - p_h // 2 + 600):
+        t = (y - (p_cy - p_h // 2)) / 600.0
+        alpha = int(45 * (1 - t))
+        gl_draw.line([(0, y), (hi_sz, y)], fill=(255, 255, 255, alpha))
+
+    hi_plate = Image.alpha_composite(hi_plate, glass_layer)
+
+    plate_final = Image.new("RGBA", (hi_sz, hi_sz), (0, 0, 0, 0))
+    plate_final.paste(hi_plate, (0, 0), plate_mask)
+
+    # 4. Центрированный символ Play с мягким скруглением углов
+    sym_mask = Image.new("L", (hi_sz, hi_sz), 0)
     sm_draw = ImageDraw.Draw(sym_mask)
 
-    cx = 2048 + 80
-    cy = 2048
-    r_tri = 740
-
-    v1 = (cx + r_tri, cy)
-    v2 = (cx - r_tri * 0.5, cy + r_tri * math.sqrt(3) / 2)
-    v3 = (cx - r_tri * 0.5, cy - r_tri * math.sqrt(3) / 2)
+    tri_r = 540
+    t_cx, t_cy = 2048 + 60, 2048
+    v1 = (t_cx + tri_r, t_cy)
+    v2 = (t_cx - tri_r * 0.5, t_cy + tri_r * math.sqrt(3) / 2)
+    v3 = (t_cx - tri_r * 0.5, t_cy - tri_r * math.sqrt(3) / 2)
     sm_draw.polygon([v1, v2, v3], fill=255)
 
-    blurred_sym = sym_mask.filter(ImageFilter.GaussianBlur(36))
+    blurred_sym = sym_mask.filter(ImageFilter.GaussianBlur(32))
     rounded_sym = blurred_sym.point(lambda p: 255 if p > 128 else 0)
 
-    sym_col = Image.new("RGBA", (hi_size, hi_size), (0, 0, 0, 0))
-    sc_draw = ImageDraw.Draw(sym_col)
-    for y in range(int(cy - r_tri), int(cy + r_tri)):
-        if 0 <= y < hi_size:
-            t = (y - (cy - r_tri)) / (2 * r_tri)
-            val = int(255 * (1 - t) + 242 * t)
-            sc_draw.line([(0, y), (hi_size, y)], fill=(val, val, val, 255))
+    sym_img = Image.new("RGBA", (hi_sz, hi_sz), (0, 0, 0, 0))
+    si_draw = ImageDraw.Draw(sym_img)
+    for y in range(int(t_cy - tri_r), int(t_cy + tri_r)):
+        t = (y - (t_cy - tri_r)) / (2 * tri_r)
+        val = int(255 * (1 - t) + 242 * t)
+        si_draw.line([(0, y), (hi_sz, y)], fill=(val, val, val, 255))
 
-    final_hi_sym = Image.new("RGBA", (hi_size, hi_size), (0, 0, 0, 0))
-    final_hi_sym.paste(sym_col, (0, 0), rounded_sym)
+    plate_final.paste(sym_img, (0, 0), rounded_sym)
 
-    sym_1024 = final_hi_sym.resize((size, size), Image.Resampling.LANCZOS)
+    plate_1024 = plate_final.resize((size, size), Image.Resampling.LANCZOS)
+    plate_shadow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    plate_shadow.paste((0, 0, 0, 140), (0, 20), plate_1024.split()[3])
+    plate_shadow = plate_shadow.filter(ImageFilter.GaussianBlur(26))
 
-    # 7. Тень под символом воспроизведения
-    sym_shadow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    sym_shadow.paste((0, 0, 0, 110), (0, 18), sym_1024.split()[3])
-    sym_shadow = sym_shadow.filter(ImageFilter.GaussianBlur(16))
-
-    # Сборка итогового изображения 1024x1024
     final_icon = Image.alpha_composite(shadow, body)
-    final_icon = Image.alpha_composite(final_icon, sym_shadow)
-    final_icon = Image.alpha_composite(final_icon, sym_1024)
+    final_icon = Image.alpha_composite(final_icon, plate_shadow)
+    final_icon = Image.alpha_composite(final_icon, plate_1024)
 
     # Сохраняем все размеры для iconset macOS
     iconset_mappings = [

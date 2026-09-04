@@ -3,7 +3,8 @@
 
 Особенности:
 - Премиальная темная палитра Android 17: глубокий фон #121316, карточки #18191E.
-- Капсульные формы (Stadium / Pill Shapes, corner_radius=18..21).
+- Единая математическая система скруглений (унифицированные капсулы Stadium Pill Shapes: высота 40px, радиус строго 20px).
+- Фирменная типографика Apple San Francisco (.AppleSystemUIFont).
 - Динамические пастельные акценты Material You: персиковый чип для видео, мятный шалфей для скачивания.
 - Быстрый автоподхват ссылок из буфера обмена с информационным бейджем.
 - 16:9 превью видеоролика и карточка метаданных.
@@ -30,11 +31,11 @@ from utils.clipboard import get_clipboard_text, is_youtube_url
 from utils.system import open_file, reveal_in_finder, send_macos_notification
 from utils.vpn import is_vpn_active
 
-# Глобальная настройка темной темы CustomTkinter
+# Глобальная настройка темы
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
-# Цветовая палитра Android 17 / Material You Expressive Dark
+# --- ДИЗАЙН-ТОКЕНЫ: ЦВЕТОВАЯ ПАЛИТРА ANDROID 17 MATERIAL YOU DARK ---
 COLOR_BG = "#121316"              # Глубокий темный фон окна
 COLOR_SURFACE = "#18191E"         # Приподнятая поверхность карточек
 COLOR_SURFACE_BORDER = "#262830"  # Тонкая рамка карточек
@@ -46,11 +47,22 @@ COLOR_ACCENT_PEACH = "#D99B90"    # Пастельный персиковый ч
 COLOR_ACCENT_PEACH_HOVER = "#CE8F84"
 COLOR_ACCENT_MINT = "#8EBF9B"     # Пастельный мятно-шалфейный (кнопка Скачать)
 COLOR_ACCENT_MINT_HOVER = "#7EAE8B"
-COLOR_TEXT_PRIMARY = "#F0F2F7"    # Высококонтрастный заголовок
+COLOR_TEXT_PRIMARY = "#F0F2F7"    # Высококонтрастный текст
 COLOR_TEXT_SECONDARY = "#9B9FA9"  # Второстепенный текст
 COLOR_TEXT_MUTED = "#6C707C"      # Заглушки и подсказки
 COLOR_VPN_WARN = "#D98A8A"        # Предупреждение о VPN
 COLOR_VPN_OK = "#8EBF9B"          # VPN отключен
+
+# --- ДИЗАЙН-ТОКЕНЫ: ГЕОМЕТРИЯ И СКРУГЛЕНИЯ (ЕДИНЫЙ СТАНДАРТ) ---
+# Все интерактивные капсулы (кнопки, поля ввода, селекторы) имеют строго высоту 40px и радиус 20px
+HEIGHT_PILL = 40
+RADIUS_PILL = 20
+RADIUS_CARD = 22
+RADIUS_THUMB = 16
+RADIUS_TOAST = 12
+
+# --- ДИЗАЙН-ТОКЕНЫ: ПРЕМИАЛЬНАЯ ТИПОГРАФИКА APPLE SAN FRANCISCO ---
+FONT_FAMILY = ".AppleSystemUIFont"
 
 
 class YouTubeDownloadApp(ctk.CTk):
@@ -63,6 +75,15 @@ class YouTubeDownloadApp(ctk.CTk):
         self.geometry("860x540")
         self.minsize(820, 510)
         self.configure(fg_color=COLOR_BG)
+
+        # Шрифты
+        self.font_title = ctk.CTkFont(family=FONT_FAMILY, size=15, weight="bold")
+        self.font_meta = ctk.CTkFont(family=FONT_FAMILY, size=12, weight="normal")
+        self.font_btn = ctk.CTkFont(family=FONT_FAMILY, size=12, weight="bold")
+        self.font_btn_large = ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold")
+        self.font_input = ctk.CTkFont(family=FONT_FAMILY, size=13, weight="normal")
+        self.font_toast = ctk.CTkFont(family=FONT_FAMILY, size=11, weight="normal")
+        self.font_status = ctk.CTkFont(family=FONT_FAMILY, size=12, weight="normal")
 
         self.current_video_info: Optional[VideoInfo] = None
         self.download_manager: Optional[DownloadManager] = None
@@ -84,7 +105,7 @@ class YouTubeDownloadApp(ctk.CTk):
                 self._show_toast("Ссылка обнаружена в буфере обмена. Нажмите «Найти».")
 
     def _setup_ui(self) -> None:
-        """Инициализирует все элементы интерфейса в стилистике Android 17."""
+        """Инициализирует все элементы интерфейса с единой геометрией и типографикой."""
 
         # 1. Верхняя поисковая капсула + кнопки
         search_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -93,13 +114,13 @@ class YouTubeDownloadApp(ctk.CTk):
         self.url_entry = ctk.CTkEntry(
             search_frame,
             placeholder_text="🔗  https://youtu.be/... (вставьте ссылку на видео)",
-            height=42,
-            corner_radius=21,
+            height=HEIGHT_PILL,
+            corner_radius=RADIUS_PILL,
             fg_color=COLOR_INPUT_BG,
             border_color=COLOR_INPUT_BORDER,
             border_width=1,
             text_color=COLOR_TEXT_PRIMARY,
-            font=ctk.CTkFont(size=13)
+            font=self.font_input
         )
         self.url_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
         self.url_entry.bind("<Return>", lambda e: self._start_fetch_info())
@@ -109,12 +130,12 @@ class YouTubeDownloadApp(ctk.CTk):
             search_frame,
             text="📋 Вставить",
             width=105,
-            height=40,
-            corner_radius=20,
+            height=HEIGHT_PILL,
+            corner_radius=RADIUS_PILL,
             fg_color=COLOR_BTN_NEUTRAL,
             hover_color=COLOR_BTN_HOVER,
             text_color=COLOR_TEXT_PRIMARY,
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=self.font_btn,
             command=self._on_paste_click
         )
         self.paste_btn.pack(side="left", padx=(0, 8))
@@ -123,12 +144,12 @@ class YouTubeDownloadApp(ctk.CTk):
             search_frame,
             text="🔍 Найти",
             width=95,
-            height=40,
-            corner_radius=20,
+            height=HEIGHT_PILL,
+            corner_radius=RADIUS_PILL,
             fg_color=COLOR_BTN_NEUTRAL,
             hover_color=COLOR_BTN_HOVER,
             text_color=COLOR_TEXT_PRIMARY,
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=self.font_btn,
             command=self._start_fetch_info
         )
         self.search_btn.pack(side="left")
@@ -142,16 +163,15 @@ class YouTubeDownloadApp(ctk.CTk):
             fg_color="#1C1E24",
             border_color="#2B2D36",
             border_width=1,
-            corner_radius=11
+            corner_radius=RADIUS_TOAST
         )
         self.toast_label = ctk.CTkLabel(
             self.toast_frame,
             text="ℹ️  Ссылка обнаружена в буфере обмена. Нажмите «Найти».",
-            font=ctk.CTkFont(size=11),
+            font=self.font_toast,
             text_color="#B2B6C2"
         )
         self.toast_label.pack(padx=10, pady=2)
-        # По умолчанию скрыт, показывается только при обнаружении ссылки
         self.toast_frame.pack_forget()
 
         # 2. Центральная карточка видео (превью 16:9 + метаданные)
@@ -160,7 +180,7 @@ class YouTubeDownloadApp(ctk.CTk):
             fg_color=COLOR_SURFACE,
             border_color=COLOR_SURFACE_BORDER,
             border_width=1,
-            corner_radius=20
+            corner_radius=RADIUS_CARD
         )
         self.card_frame.pack(fill="both", expand=True, padx=24, pady=(0, 10))
 
@@ -168,7 +188,7 @@ class YouTubeDownloadApp(ctk.CTk):
         self.thumb_container = ctk.CTkFrame(
             self.card_frame,
             fg_color="#121316",
-            corner_radius=16,
+            corner_radius=RADIUS_THUMB,
             width=270,
             height=152
         )
@@ -178,7 +198,7 @@ class YouTubeDownloadApp(ctk.CTk):
         self.thumb_label = ctk.CTkLabel(
             self.thumb_container,
             text="🎬\n\n[ Ожидание ссылки на видео ]",
-            font=ctk.CTkFont(size=12),
+            font=self.font_meta,
             text_color=COLOR_TEXT_MUTED
         )
         self.thumb_label.pack(fill="both", expand=True)
@@ -190,7 +210,7 @@ class YouTubeDownloadApp(ctk.CTk):
         self.video_title_label = ctk.CTkLabel(
             self.meta_frame,
             text="Вставьте ссылку и нажмите «Найти» для анализа видео",
-            font=ctk.CTkFont(size=15, weight="bold"),
+            font=self.font_title,
             text_color=COLOR_TEXT_PRIMARY,
             anchor="w",
             wraplength=480,
@@ -201,7 +221,7 @@ class YouTubeDownloadApp(ctk.CTk):
         self.video_channel_label = ctk.CTkLabel(
             self.meta_frame,
             text="👤  Канал: —",
-            font=ctk.CTkFont(size=13),
+            font=self.font_meta,
             text_color=COLOR_TEXT_SECONDARY,
             anchor="w"
         )
@@ -210,7 +230,7 @@ class YouTubeDownloadApp(ctk.CTk):
         self.video_duration_label = ctk.CTkLabel(
             self.meta_frame,
             text="⏱  Длительность: —",
-            font=ctk.CTkFont(size=12),
+            font=self.font_meta,
             text_color=COLOR_TEXT_SECONDARY,
             anchor="w"
         )
@@ -220,17 +240,17 @@ class YouTubeDownloadApp(ctk.CTk):
         controls_frame = ctk.CTkFrame(self, fg_color="transparent")
         controls_frame.pack(fill="x", padx=24, pady=(2, 10))
 
-        # Переключатель режимов: стильные капсульные чипы Material You
+        # Переключатель режимов: капсульные чипы единой высоты 40px и радиуса 20px
         self.mode_video_btn = ctk.CTkButton(
             controls_frame,
             text="▶  Видео со звуком",
             width=150,
-            height=36,
-            corner_radius=18,
+            height=HEIGHT_PILL,
+            corner_radius=RADIUS_PILL,
             fg_color=COLOR_ACCENT_PEACH,
             hover_color=COLOR_ACCENT_PEACH_HOVER,
             text_color="#231210",
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=self.font_btn,
             command=lambda: self._set_mode("video")
         )
         self.mode_video_btn.pack(side="left", padx=(0, 8))
@@ -239,12 +259,12 @@ class YouTubeDownloadApp(ctk.CTk):
             controls_frame,
             text="🎵  Только звук (MP3 320k)",
             width=185,
-            height=36,
-            corner_radius=18,
+            height=HEIGHT_PILL,
+            corner_radius=RADIUS_PILL,
             fg_color="#202126",
             hover_color="#2A2C33",
             text_color=COLOR_TEXT_SECONDARY,
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=self.font_btn,
             command=lambda: self._set_mode("audio")
         )
         self.mode_audio_btn.pack(side="left", padx=(0, 16))
@@ -253,7 +273,7 @@ class YouTubeDownloadApp(ctk.CTk):
         self.res_label = ctk.CTkLabel(
             controls_frame,
             text="Качество:",
-            font=ctk.CTkFont(size=13),
+            font=self.font_meta,
             text_color=COLOR_TEXT_SECONDARY
         )
         self.res_label.pack(side="left", padx=(0, 8))
@@ -262,8 +282,8 @@ class YouTubeDownloadApp(ctk.CTk):
             controls_frame,
             values=["Качество видео..."],
             width=210,
-            height=36,
-            corner_radius=18,
+            height=HEIGHT_PILL,
+            corner_radius=RADIUS_PILL,
             fg_color="#202126",
             button_color="#202126",
             button_hover_color="#2A2C33",
@@ -271,7 +291,7 @@ class YouTubeDownloadApp(ctk.CTk):
             dropdown_hover_color="#2D2F38",
             dropdown_text_color=COLOR_TEXT_PRIMARY,
             text_color=COLOR_TEXT_PRIMARY,
-            font=ctk.CTkFont(size=12)
+            font=self.font_meta
         )
         self.res_option_menu.set("Качество видео...")
         self.res_option_menu.pack(side="left")
@@ -280,13 +300,13 @@ class YouTubeDownloadApp(ctk.CTk):
         self.vpn_badge = ctk.CTkLabel(
             controls_frame,
             text="🛡️  Проверка VPN...",
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12, weight="bold"),
             text_color=COLOR_TEXT_SECONDARY
         )
         self.vpn_badge.pack(side="right")
         self._update_vpn_badge()
 
-        # 4. Строка пути сохранения (Капсульный бокс + Кнопка)
+        # 4. Строка пути сохранения (Капсульный бокс + Кнопка единой высоты 40px и радиуса 20px)
         folder_frame = ctk.CTkFrame(self, fg_color="transparent")
         folder_frame.pack(fill="x", padx=24, pady=(0, 10))
 
@@ -295,8 +315,8 @@ class YouTubeDownloadApp(ctk.CTk):
             fg_color=COLOR_SURFACE,
             border_color=COLOR_SURFACE_BORDER,
             border_width=1,
-            corner_radius=18,
-            height=38
+            corner_radius=RADIUS_PILL,
+            height=HEIGHT_PILL
         )
         self.folder_box.pack(side="left", fill="x", expand=True, padx=(0, 10))
         self.folder_box.pack_propagate(False)
@@ -304,7 +324,7 @@ class YouTubeDownloadApp(ctk.CTk):
         self.folder_label = ctk.CTkLabel(
             self.folder_box,
             text=f"📁  {config.download_path}",
-            font=ctk.CTkFont(size=12),
+            font=self.font_meta,
             text_color=COLOR_TEXT_SECONDARY,
             anchor="w"
         )
@@ -314,12 +334,12 @@ class YouTubeDownloadApp(ctk.CTk):
             folder_frame,
             text="📁 Выбрать...",
             width=120,
-            height=38,
-            corner_radius=18,
+            height=HEIGHT_PILL,
+            corner_radius=RADIUS_PILL,
             fg_color=COLOR_BTN_NEUTRAL,
             hover_color=COLOR_BTN_HOVER,
             text_color=COLOR_TEXT_PRIMARY,
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=self.font_btn,
             command=self._on_change_folder
         )
         change_folder_btn.pack(side="right")
@@ -327,7 +347,7 @@ class YouTubeDownloadApp(ctk.CTk):
         # 5. Прогресс-бар (тонкий Material капсульный бар)
         self.progress_bar = ctk.CTkProgressBar(
             self,
-            height=5,
+            height=6,
             corner_radius=3,
             fg_color="#1C1D22",
             progress_color=COLOR_ACCENT_MINT
@@ -335,14 +355,14 @@ class YouTubeDownloadApp(ctk.CTk):
         self.progress_bar.pack(fill="x", padx=24, pady=(6, 8))
         self.progress_bar.set(0)
 
-        # 6. Нижняя панель действий (Статус + СКАЧАТЬ + В Finder)
+        # 6. Нижняя панель действий (Статус + СКАЧАТЬ + В Finder, высота 40px, радиус 20px)
         bottom_frame = ctk.CTkFrame(self, fg_color="transparent")
         bottom_frame.pack(fill="x", padx=24, pady=(0, 18))
 
         self.status_label = ctk.CTkLabel(
             bottom_frame,
             text="Готов к работе",
-            font=ctk.CTkFont(size=12),
+            font=self.font_status,
             text_color=COLOR_TEXT_MUTED,
             anchor="w"
         )
@@ -352,12 +372,12 @@ class YouTubeDownloadApp(ctk.CTk):
             bottom_frame,
             text="📥  СКАЧАТЬ",
             width=140,
-            height=40,
-            corner_radius=20,
+            height=HEIGHT_PILL,
+            corner_radius=RADIUS_PILL,
             fg_color=COLOR_ACCENT_MINT,
             hover_color=COLOR_ACCENT_MINT_HOVER,
             text_color="#122617",
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=self.font_btn_large,
             command=self._start_download
         )
         self.download_btn.pack(side="right", padx=(8, 0))
@@ -366,12 +386,12 @@ class YouTubeDownloadApp(ctk.CTk):
             bottom_frame,
             text="📁  В Finder",
             width=115,
-            height=40,
-            corner_radius=20,
+            height=HEIGHT_PILL,
+            corner_radius=RADIUS_PILL,
             fg_color=COLOR_BTN_NEUTRAL,
             hover_color=COLOR_BTN_HOVER,
             text_color=COLOR_TEXT_PRIMARY,
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=self.font_btn,
             state="disabled",
             command=self._on_finder_click
         )
@@ -575,7 +595,7 @@ class YouTubeDownloadApp(ctk.CTk):
             f"Пожалуйста, отключите VPN в строке меню macOS\n"
             f"для максимальной скорости и экономии трафика."
         )
-        label = ctk.CTkLabel(dialog, text=msg, font=ctk.CTkFont(size=13), text_color=COLOR_TEXT_PRIMARY, justify="center")
+        label = ctk.CTkLabel(dialog, text=msg, font=self.font_meta, text_color=COLOR_TEXT_PRIMARY, justify="center")
         label.pack(padx=20, pady=(25, 20))
 
         btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
@@ -591,10 +611,12 @@ class YouTubeDownloadApp(ctk.CTk):
         cancel_btn = ctk.CTkButton(
             btn_frame,
             text="Ок, я отключу VPN",
-            corner_radius=18,
+            height=HEIGHT_PILL,
+            corner_radius=RADIUS_PILL,
             fg_color=COLOR_BTN_NEUTRAL,
             hover_color=COLOR_BTN_HOVER,
             text_color=COLOR_TEXT_PRIMARY,
+            font=self.font_btn,
             command=cancel
         )
         cancel_btn.pack(side="left", fill="x", expand=True, padx=(0, 10))
@@ -602,10 +624,12 @@ class YouTubeDownloadApp(ctk.CTk):
         ignore_btn = ctk.CTkButton(
             btn_frame,
             text="Всё равно скачать",
-            corner_radius=18,
+            height=HEIGHT_PILL,
+            corner_radius=RADIUS_PILL,
             fg_color="#3A3C44",
             hover_color="#484B55",
             text_color=COLOR_TEXT_PRIMARY,
+            font=self.font_btn,
             command=proceed
         )
         ignore_btn.pack(side="right", fill="x", expand=True, padx=(10, 0))
