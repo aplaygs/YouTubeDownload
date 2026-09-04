@@ -1,0 +1,7 @@
+yt-dlp>=2025.1.1
+rich>=13.7.0
+questionary>=2.0.1
+customtkinter>=5.2.0
+pillow>=10.0.0
+pyperclip>=1.8.2
+static-ffmpeg>=2.7
